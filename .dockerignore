@@ -9,6 +9,7 @@ tests
 .scratch
 docs
 *.md
+!README.md
 .pytest_cache
 .ruff_cache
 __pycache__
