@@ -1,6 +1,8 @@
 """Campaign management and asset upload tools (Scope C, Q13, Q15, Q18, Q22)."""
 
 import base64
+import mimetypes
+import os
 from typing import Any
 
 from app.cloudinary.client import CloudinaryClient
@@ -75,16 +77,24 @@ def list_ad_accounts() -> dict[str, Any]:
 
 
 def upload_creative_asset(
-    image_base64: str,
-    mime_type: str,
-    filename: str,
+    file_path: str | None = None,
+    image_base64: str | None = None,
+    mime_type: str | None = None,
+    filename: str | None = None,
 ) -> dict[str, Any]:
-    """Upload an image asset via Base64 to Cloudinary and return a public CDN URL.
+    """Upload an image asset to Cloudinary CDN and return a public CDN URL.
+
+    LLM USAGE GUIDANCE:
+    - PREFERRED METHOD: Pass `file_path` with the path to the local image file (e.g. '/path/to/image.png' or './creatives/ad.jpg').
+      The server streams the file directly from disk to Cloudinary, avoiding heavy Base64 token overhead in the conversation context.
+    - FALLBACK METHOD: Pass `image_base64` only if the image is in-memory or cannot be referenced by a file path.
+    - `filename` and `mime_type` are optional when `file_path` is provided (auto-detected from file).
 
     Parameters:
-        image_base64: Base64-encoded image data string (max 10MB decoded)
-        mime_type: MIME type of the image ('image/png', 'image/jpeg', 'image/webp', 'image/gif')
-        filename: Friendly filename for the asset (e.g. 'hero_banner.png')
+        file_path: Local filesystem path to the image file to stream (max 10MB). Preferred.
+        image_base64: Base64-encoded image string (max 10MB decoded). Use only when file_path is unavailable.
+        mime_type: MIME type of the image ('image/png', 'image/jpeg', 'image/webp', 'image/gif'). Optional when file_path is provided.
+        filename: Friendly filename for the asset (e.g. 'hero_banner.png'). Optional when file_path is provided.
     """
     correlation_id = generate_correlation_id()
     try:
@@ -92,7 +102,72 @@ def upload_creative_asset(
         if not cloud_client.is_configured:
             raise CloudinaryNotConfiguredError(correlation_id=correlation_id)
 
-        clean_mime = mime_type.strip().lower()
+        if not file_path and not image_base64:
+            raise InvalidInputError(
+                "Either 'file_path' or 'image_base64' must be provided",
+                correlation_id=correlation_id,
+            )
+
+        # 1. File stream upload path (Preferred)
+        if file_path:
+            if not isinstance(file_path, str) or not file_path.strip():
+                raise InvalidInputError(
+                    "file_path must be a non-empty string",
+                    correlation_id=correlation_id,
+                )
+
+            resolved_path = os.path.abspath(os.path.expanduser(file_path.strip()))
+            if not os.path.isfile(resolved_path):
+                raise InvalidInputError(
+                    f"File not found or is not a regular file: {file_path}",
+                    correlation_id=correlation_id,
+                )
+
+            file_size = os.path.getsize(resolved_path)
+            if file_size == 0:
+                raise InvalidInputError(
+                    "Image file is empty (0 bytes)",
+                    correlation_id=correlation_id,
+                )
+
+            if file_size > MAX_IMAGE_BYTES:
+                raise InvalidInputError(
+                    f"Image size ({file_size} bytes) exceeds maximum 10MB limit ({MAX_IMAGE_BYTES} bytes)",
+                    correlation_id=correlation_id,
+                )
+
+            if mime_type and mime_type.strip():
+                clean_mime = mime_type.strip().lower()
+            else:
+                guessed_mime, _ = mimetypes.guess_type(resolved_path)
+                clean_mime = (guessed_mime or "").strip().lower()
+
+            if clean_mime not in ALLOWED_MIME_TYPES:
+                raise InvalidInputError(
+                    f"Invalid mime_type '{clean_mime or mime_type}'. Allowed: {sorted(ALLOWED_MIME_TYPES)}",
+                    correlation_id=correlation_id,
+                )
+
+            clean_filename = (
+                filename.strip() if filename and filename.strip() else os.path.basename(resolved_path)
+            ) or "creative.png"
+
+            with open(resolved_path, "rb") as file_stream:
+                asset = cloud_client.upload_image_stream(
+                    file_stream=file_stream,
+                    filename=clean_filename,
+                    mime_type=clean_mime,
+                    file_size=file_size,
+                )
+
+            res = {
+                "asset": asset.model_dump(),
+                "success": True,
+            }
+            return enforce_response_limits(sanitize_for_output(res))
+
+        # 2. Base64 payload upload path (Fallback)
+        clean_mime = (mime_type or "").strip().lower()
         if clean_mime not in ALLOWED_MIME_TYPES:
             raise InvalidInputError(
                 f"Invalid mime_type '{mime_type}'. Allowed: {sorted(ALLOWED_MIME_TYPES)}",
@@ -101,7 +176,8 @@ def upload_creative_asset(
 
         if not isinstance(image_base64, str) or not image_base64.strip():
             raise InvalidInputError(
-                "image_base64 must be a non-empty base64 string", correlation_id=correlation_id
+                "image_base64 must be a non-empty base64 string",
+                correlation_id=correlation_id,
             )
 
         # Strip possible data URI header if present
@@ -124,7 +200,7 @@ def upload_creative_asset(
 
         asset = cloud_client.upload_image(
             image_bytes=image_bytes,
-            filename=filename.strip() or "creative.png",
+            filename=(filename or "creative.png").strip() or "creative.png",
             mime_type=clean_mime,
         )
 

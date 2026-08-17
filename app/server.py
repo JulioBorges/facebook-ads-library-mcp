@@ -80,7 +80,11 @@ mcp.tool(
 
 mcp.tool(
     name="upload_creative_asset",
-    description="Upload an image via Base64 to Cloudinary and receive a public CDN URL (max 10MB).",
+    description=(
+        "Upload an image asset to Cloudinary CDN and receive a public URL (max 10MB). "
+        "LLM GUIDANCE: Prefer passing 'file_path' with the local file path to stream the image directly "
+        "from disk without token overhead. Alternatively pass 'image_base64' if the file is only in memory."
+    ),
 )(upload_creative_asset)
 
 mcp.tool(

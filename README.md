@@ -47,7 +47,7 @@ Hardened, secure Model Context Protocol (MCP) server built with **FastMCP 3.4.7*
 | Tool | Parameters | Description |
 |---|---|---|
 | `list_ad_accounts` | *(none)* | List authorized Meta ad accounts (read-only, cached 5 min). |
-| `upload_creative_asset` | `image_base64`, `mime_type`, `filename` | Upload image asset via Base64 to Cloudinary (max 10MB). |
+| `upload_creative_asset` | `file_path=None`, `image_base64=None`, `mime_type=None`, `filename=None` | Upload image asset to Cloudinary (direct file streaming or Base64 fallback, max 10MB). |
 | `create_campaign` | `ad_account_id`, `name`, `objective`, `daily_budget`, `special_ad_categories=None`, `dry_run=True` | Create campaign with budget ceiling and dry-run safety default. |
 | `create_ad_set` | `ad_account_id`, `campaign_id`, `name`, `countries`, `age_min=18`, `age_max=65`, `genders=0`, `publisher_platforms=None`, `daily_budget=None`, `dry_run=True` | Create ad set with validated server-side targeting. |
 | `create_ad` | `ad_account_id`, `ad_set_id`, `image_url`, `title`, `body`, `link_url`, `call_to_action`, `dry_run=True` | Create ad with image URL, link destination, and CTA allowlist. |

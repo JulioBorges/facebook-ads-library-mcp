@@ -1,5 +1,7 @@
 """CloudinaryClient: Thin isolated client for uploading creative assets (Q18, Q19, Q31)."""
 
+from typing import BinaryIO
+
 import cloudinary
 import cloudinary.uploader
 
@@ -64,3 +66,43 @@ class CloudinaryClient:
             height=response.get("height"),
             bytes=int(response.get("bytes", len(image_bytes))),
         )
+
+    def upload_image_stream(
+        self,
+        file_stream: BinaryIO,
+        filename: str,
+        mime_type: str,
+        folder: str | None = None,
+        file_size: int | None = None,
+    ) -> SafeAssetResult:
+        """Upload image from a binary file stream to Cloudinary with safe response formatting."""
+        if not self.is_configured:
+            raise CloudinaryNotConfiguredError()
+
+        target_folder = folder or self.folder
+
+        cloudinary.config(
+            cloud_name=self.cloud_name,
+            api_key=self.api_key,
+            api_secret=self.api_secret,
+            secure=True,
+        )
+
+        response = cloudinary.uploader.upload(
+            file_stream,
+            folder=target_folder,
+            resource_type="image",
+            use_filename=True,
+            filename_override=filename,
+            timeout=30,
+        )
+
+        return SafeAssetResult(
+            asset_id=str(response.get("public_id", "")),
+            public_url=str(response.get("secure_url", "")),
+            mime_type=mime_type,
+            width=response.get("width"),
+            height=response.get("height"),
+            bytes=int(response.get("bytes", file_size or 0)),
+        )
+
