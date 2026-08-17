@@ -29,11 +29,20 @@ class MetaAdsClient:
         connect_timeout: int = 5,
         read_timeout: int = 30,
         max_retries: int = 3,
+        max_total_seconds: float = 45.0,
     ):
         self.graph_api_version = graph_api_version
         self.connect_timeout = connect_timeout
         self.read_timeout = read_timeout
         self.max_retries = max_retries
+        # Hard wall-clock ceiling across all attempts+backoffs for a single call.
+        # (connect_timeout + read_timeout) * (max_retries + 1) can otherwise
+        # exceed a calling MCP client's own ~60s tool-call timeout when the
+        # network is down/blocked rather than merely slow -- e.g. the default
+        # 5s/30s timeouts with 3 retries can take up to ~127s to finally raise,
+        # so the caller sees an opaque timeout instead of our clear error
+        # message. This mirrors the fix already applied to CloudinaryClient.
+        self.max_total_seconds = max_total_seconds
         self.base_url = f"https://graph.facebook.com/{graph_api_version}"
 
         self.session = requests.Session()
@@ -47,9 +56,16 @@ class MetaAdsClient:
         )
 
     def _get_with_retry(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Execute GET request with exponential backoff retry on transient errors (Q25)."""
+        """Execute GET request with exponential backoff retry on transient errors (Q25).
+
+        Bounded by `max_total_seconds` wall-clock time across all attempts and
+        backoff sleeps, so a persistently unreachable network fails with a
+        clear MetaAPIError well before a calling MCP client's own timeout,
+        instead of being silently multiplied past it by the retry loop.
+        """
         retries = 0
         backoffs = [1, 2, 4]
+        start_time = time.monotonic()
 
         while True:
             try:
@@ -71,6 +87,12 @@ class MetaAdsClient:
 
                 if response.status_code in RETRYABLE_STATUS_CODES and retries < self.max_retries:
                     sleep_time = backoffs[min(retries, len(backoffs) - 1)]
+                    if time.monotonic() - start_time + sleep_time >= self.max_total_seconds:
+                        raise MetaAPIError(
+                            f"Meta API error (HTTP {response.status_code}) after "
+                            f"{retries + 1} attempt(s); giving up at the "
+                            f"{self.max_total_seconds:.0f}s retry budget"
+                        )
                     retries += 1
                     time.sleep(sleep_time)
                     continue
@@ -88,12 +110,18 @@ class MetaAdsClient:
                 raise MetaAPIError(err_msg)
 
             except requests.RequestException as exc:
-                if retries < self.max_retries:
-                    sleep_time = backoffs[min(retries, len(backoffs) - 1)]
+                sleep_time = backoffs[min(retries, len(backoffs) - 1)]
+                elapsed = time.monotonic() - start_time
+                if retries < self.max_retries and elapsed + sleep_time < self.max_total_seconds:
                     retries += 1
                     time.sleep(sleep_time)
                     continue
-                raise MetaAPIError(f"Meta API network failure: {exc!s}") from exc
+                raise MetaAPIError(
+                    "Could not reach the Meta Graph API within the configured retry "
+                    f"budget ({elapsed:.1f}s elapsed, {retries + 1} attempt(s)). This "
+                    "usually means a network, VPN, or proxy/firewall is blocking "
+                    f"graph.facebook.com. Underlying error: {exc!s}"
+                ) from exc
 
     def _post_no_retry(
         self,
