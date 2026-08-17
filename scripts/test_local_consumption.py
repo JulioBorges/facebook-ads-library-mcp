@@ -10,6 +10,7 @@ Demonstrates and verifies:
 import asyncio
 import json
 import os
+
 import responses
 from starlette.testclient import TestClient
 
@@ -71,17 +72,25 @@ def run_local_mcp_consumption_test() -> None:
     with TestClient(app) as client:
         # Sem header de autorização -> 401
         unauth_resp = client.get("/mcp")
-        print(f"    Requisição sem token -> Status {unauth_resp.status_code} ({unauth_resp.json().get('error')})")
+        print(
+            f"    Requisição sem token -> Status {unauth_resp.status_code} ({unauth_resp.json().get('error')})"
+        )
         assert unauth_resp.status_code == 401
 
         # Com token inválido -> 403
         forbidden_resp = client.get("/mcp", headers={"Authorization": "Bearer token_incorreto"})
-        print(f"    Requisição com token inválido -> Status {forbidden_resp.status_code} ({forbidden_resp.json().get('error')})")
+        print(
+            f"    Requisição com token inválido -> Status {forbidden_resp.status_code} ({forbidden_resp.json().get('error')})"
+        )
         assert forbidden_resp.status_code == 403
 
         # Com token válido -> Autenticado
-        auth_resp = client.get("/mcp", headers={"Authorization": "Bearer local-mcp-secret-token-abcdef"})
-        print(f"    Requisição com token correto -> Autenticado com sucesso (Status {auth_resp.status_code})")
+        auth_resp = client.get(
+            "/mcp", headers={"Authorization": "Bearer local-mcp-secret-token-abcdef"}
+        )
+        print(
+            f"    Requisição com token correto -> Autenticado com sucesso (Status {auth_resp.status_code})"
+        )
         assert auth_resp.status_code != 401
         assert auth_resp.status_code != 403
 
