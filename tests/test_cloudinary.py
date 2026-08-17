@@ -29,12 +29,35 @@ def test_cloudinary_upload_mock():
         "bytes": 204800,
     }
 
-    with patch("cloudinary.uploader.upload", return_value=fake_response):
+    with patch("cloudinary.uploader.upload", return_value=fake_response) as mock_upload:
         result = client.upload_image(b"fake_png_data", "sample.png", "image/png")
         assert result.asset_id == "facebook_ads_creatives/sample_img"
         assert "res.cloudinary.com" in result.public_url
         assert result.width == 1080
         assert result.bytes == 204800
+        mock_upload.assert_called_once()
+        assert mock_upload.call_args[1]["folder"] == "facebook_ads_creatives"
+
+
+def test_cloudinary_upload_custom_folder():
+    client = CloudinaryClient(
+        cloud_name="my_cloud",
+        api_key="123",
+        api_secret="abc",
+        folder="exclusive_campaign_assets",
+    )
+    fake_response = {
+        "public_id": "exclusive_campaign_assets/sample_img",
+        "secure_url": "https://res.cloudinary.com/my_cloud/image/upload/v1/exclusive_campaign_assets/sample_img.png",
+        "width": 800,
+        "height": 600,
+        "bytes": 102400,
+    }
+
+    with patch("cloudinary.uploader.upload", return_value=fake_response) as mock_upload:
+        result = client.upload_image(b"fake_png_data", "sample.png", "image/png")
+        assert result.asset_id == "exclusive_campaign_assets/sample_img"
+        assert mock_upload.call_args[1]["folder"] == "exclusive_campaign_assets"
 
 
 def test_upload_creative_asset_invalid_mime():

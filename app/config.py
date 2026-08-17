@@ -55,6 +55,7 @@ class Settings:
     cloudinary_cloud_name: str | None
     cloudinary_api_key: str | None
     cloudinary_api_secret: str | None
+    cloudinary_folder: str
 
     # Operational Limits & Financial Safeguards
     max_campaign_budget: float  # In account currency (default R$10.00)
@@ -117,6 +118,13 @@ def load_settings() -> Settings:
         file_path=os.environ.get("CLOUDINARY_API_SECRET_FILE"),
         env_name="CLOUDINARY_API_SECRET",
     )
+    cloud_folder = (
+        read_secret(
+            file_path=os.environ.get("CLOUDINARY_FOLDER_FILE"),
+            env_name="CLOUDINARY_FOLDER",
+        )
+        or "facebook_ads_creatives"
+    ).strip()
 
     meta_version = os.environ.get("META_GRAPH_API_VERSION", "v26.0").strip()
 
@@ -140,6 +148,7 @@ def load_settings() -> Settings:
         cloudinary_cloud_name=cloud_name,
         cloudinary_api_key=cloud_key,
         cloudinary_api_secret=cloud_secret,
+        cloudinary_folder=cloud_folder,
         max_campaign_budget=max_budget,
         crawler_concurrency=int(os.environ.get("CRAWLER_CONCURRENCY", "1")),
         crawler_timeout=int(os.environ.get("CRAWLER_TIMEOUT", "45")),

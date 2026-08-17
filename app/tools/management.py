@@ -41,6 +41,7 @@ def get_management_services() -> tuple[AdAccountService, CampaignService, Cloudi
         cloud_name=settings.cloudinary_cloud_name,
         api_key=settings.cloudinary_api_key,
         api_secret=settings.cloudinary_api_secret,
+        folder=settings.cloudinary_folder,
     )
     return account_service, campaign_service, cloudinary_client
 

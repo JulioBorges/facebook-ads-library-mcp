@@ -28,6 +28,7 @@ services:
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:?}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:?}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:?}
+      CLOUDINARY_FOLDER: ${CLOUDINARY_FOLDER:-facebook_ads_creatives}
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\" || exit 1"]
       interval: 30s

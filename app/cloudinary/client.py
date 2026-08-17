@@ -15,10 +15,12 @@ class CloudinaryClient:
         cloud_name: str | None = None,
         api_key: str | None = None,
         api_secret: str | None = None,
+        folder: str = "facebook_ads_creatives",
     ):
         self.cloud_name = cloud_name
         self.api_key = api_key
         self.api_secret = api_secret
+        self.folder = folder
 
     @property
     def is_configured(self) -> bool:
@@ -30,11 +32,13 @@ class CloudinaryClient:
         image_bytes: bytes,
         filename: str,
         mime_type: str,
-        folder: str = "facebook_ads_creatives",
+        folder: str | None = None,
     ) -> SafeAssetResult:
         """Upload raw image bytes to Cloudinary with strict timeouts and safe response formatting."""
         if not self.is_configured:
             raise CloudinaryNotConfiguredError()
+
+        target_folder = folder or self.folder
 
         cloudinary.config(
             cloud_name=self.cloud_name,
@@ -45,7 +49,7 @@ class CloudinaryClient:
 
         response = cloudinary.uploader.upload(
             image_bytes,
-            folder=folder,
+            folder=target_folder,
             resource_type="image",
             use_filename=True,
             filename_override=filename,
