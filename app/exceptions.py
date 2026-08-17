@@ -90,6 +90,17 @@ class CloudinaryNotConfiguredError(MCPBaseException):
         )
 
 
+class CloudinaryUploadError(MCPBaseException):
+    """Raised when the Cloudinary upload request fails, times out, or is unreachable."""
+
+    def __init__(self, message: str, correlation_id: str | None = None):
+        super().__init__(
+            message=message,
+            code="CLOUDINARY_UPLOAD_ERROR",
+            correlation_id=correlation_id,
+        )
+
+
 class InvalidInputError(MCPBaseException):
     """Raised when an input parameter violates schema, type, or security validation rules."""
 

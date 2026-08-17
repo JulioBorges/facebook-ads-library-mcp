@@ -1,14 +1,25 @@
-"""Tests for CloudinaryClient, file streaming, Base64 decoding, MIME filtering, and size limits (Q18, Q19)."""
+"""Tests for CloudinaryClient, file streaming, Base64 decoding, MIME filtering, and size limits (Q18, Q19).
+
+NOTE: CloudinaryClient talks to the Cloudinary REST API directly via `requests`
+(see app/cloudinary/client.py docstring for why the `cloudinary` SDK's built-in
+uploader was replaced -- its default retry policy could multiply the configured
+timeout well past what callers expect). Tests mock the HTTP layer with
+`responses` instead of patching `cloudinary.uploader.upload`, consistent with
+how the rest of this suite mocks the Meta Graph API.
+"""
 
 import base64
 import io
-from unittest.mock import patch
 
 import pytest
+import requests
+import responses
 
 from app.cloudinary.client import CloudinaryClient
-from app.exceptions import CloudinaryNotConfiguredError
+from app.exceptions import CloudinaryNotConfiguredError, CloudinaryUploadError
 from app.tools.management import upload_creative_asset
+
+UPLOAD_URL = "https://api.cloudinary.com/v1_1/my_cloud/image/upload"
 
 
 def test_cloudinary_not_configured_error():
@@ -20,6 +31,7 @@ def test_cloudinary_not_configured_error():
         client.upload_image_stream(io.BytesIO(b"test_image_bytes"), "sample.png", "image/png")
 
 
+@responses.activate
 def test_cloudinary_upload_mock():
     client = CloudinaryClient(cloud_name="my_cloud", api_key="123", api_secret="abc")
     assert client.is_configured is True
@@ -31,17 +43,18 @@ def test_cloudinary_upload_mock():
         "height": 1080,
         "bytes": 204800,
     }
+    responses.add(responses.POST, UPLOAD_URL, json=fake_response, status=200)
 
-    with patch("cloudinary.uploader.upload", return_value=fake_response) as mock_upload:
-        result = client.upload_image(b"fake_png_data", "sample.png", "image/png")
-        assert result.asset_id == "facebook_ads_creatives/sample_img"
-        assert "res.cloudinary.com" in result.public_url
-        assert result.width == 1080
-        assert result.bytes == 204800
-        mock_upload.assert_called_once()
-        assert mock_upload.call_args[1]["folder"] == "facebook_ads_creatives"
+    result = client.upload_image(b"fake_png_data", "sample.png", "image/png")
+    assert result.asset_id == "facebook_ads_creatives/sample_img"
+    assert "res.cloudinary.com" in result.public_url
+    assert result.width == 1080
+    assert result.bytes == 204800
+    assert len(responses.calls) == 1
+    assert b'name="folder"\r\n\r\nfacebook_ads_creatives' in responses.calls[0].request.body
 
 
+@responses.activate
 def test_cloudinary_upload_stream_mock():
     client = CloudinaryClient(cloud_name="my_cloud", api_key="123", api_secret="abc")
     fake_response = {
@@ -51,22 +64,23 @@ def test_cloudinary_upload_stream_mock():
         "height": 628,
         "bytes": 150000,
     }
+    responses.add(responses.POST, UPLOAD_URL, json=fake_response, status=200)
 
     stream = io.BytesIO(b"binary_stream_data")
-    with patch("cloudinary.uploader.upload", return_value=fake_response) as mock_upload:
-        result = client.upload_image_stream(
-            file_stream=stream,
-            filename="banner.png",
-            mime_type="image/png",
-            file_size=150000,
-        )
-        assert result.asset_id == "facebook_ads_creatives/stream_sample"
-        assert result.public_url == fake_response["secure_url"]
-        assert result.width == 1200
-        assert result.bytes == 150000
-        mock_upload.assert_called_once()
+    result = client.upload_image_stream(
+        file_stream=stream,
+        filename="banner.png",
+        mime_type="image/png",
+        file_size=150000,
+    )
+    assert result.asset_id == "facebook_ads_creatives/stream_sample"
+    assert result.public_url == fake_response["secure_url"]
+    assert result.width == 1200
+    assert result.bytes == 150000
+    assert len(responses.calls) == 1
 
 
+@responses.activate
 def test_cloudinary_upload_custom_folder():
     client = CloudinaryClient(
         cloud_name="my_cloud",
@@ -81,11 +95,42 @@ def test_cloudinary_upload_custom_folder():
         "height": 600,
         "bytes": 102400,
     }
+    responses.add(responses.POST, UPLOAD_URL, json=fake_response, status=200)
 
-    with patch("cloudinary.uploader.upload", return_value=fake_response) as mock_upload:
-        result = client.upload_image(b"fake_png_data", "sample.png", "image/png")
-        assert result.asset_id == "exclusive_campaign_assets/sample_img"
-        assert mock_upload.call_args[1]["folder"] == "exclusive_campaign_assets"
+    result = client.upload_image(b"fake_png_data", "sample.png", "image/png")
+    assert result.asset_id == "exclusive_campaign_assets/sample_img"
+    assert b'name="folder"\r\n\r\nexclusive_campaign_assets' in responses.calls[0].request.body
+
+
+@responses.activate
+def test_cloudinary_upload_network_failure_raises_clean_error():
+    """A connection failure (proxy/firewall/DNS) must fail fast with a clear error,
+    not hang -- this is the regression this fix targets."""
+    client = CloudinaryClient(
+        cloud_name="my_cloud", api_key="123", api_secret="abc", connect_timeout=2, read_timeout=2
+    )
+    responses.add(
+        responses.POST,
+        UPLOAD_URL,
+        body=requests.exceptions.ConnectionError("simulated network/proxy failure"),
+    )
+
+    with pytest.raises(CloudinaryUploadError, match="Could not reach Cloudinary"):
+        client.upload_image(b"fake_png_data", "sample.png", "image/png")
+
+
+@responses.activate
+def test_cloudinary_upload_api_error_raises_clean_error():
+    client = CloudinaryClient(cloud_name="my_cloud", api_key="123", api_secret="abc")
+    responses.add(
+        responses.POST,
+        UPLOAD_URL,
+        json={"error": {"message": "Invalid Signature"}},
+        status=401,
+    )
+
+    with pytest.raises(CloudinaryUploadError, match="Invalid Signature"):
+        client.upload_image(b"fake_png_data", "sample.png", "image/png")
 
 
 def test_upload_creative_asset_missing_both_args():
@@ -95,6 +140,7 @@ def test_upload_creative_asset_missing_both_args():
     assert "Either 'file_path' or 'image_base64' must be provided" in res["error"]["message"]
 
 
+@responses.activate
 def test_upload_creative_asset_file_stream_success(tmp_path, monkeypatch):
     monkeypatch.setenv("CLOUDINARY_CLOUD_NAME", "my_cloud")
     monkeypatch.setenv("CLOUDINARY_API_KEY", "123")
@@ -110,13 +156,13 @@ def test_upload_creative_asset_file_stream_success(tmp_path, monkeypatch):
         "height": 1080,
         "bytes": len(b"fake_png_image_content"),
     }
+    responses.add(responses.POST, UPLOAD_URL, json=fake_response, status=200)
 
-    with patch("cloudinary.uploader.upload", return_value=fake_response):
-        res = upload_creative_asset(file_path=str(test_file))
-        assert res["success"] is True
-        assert res["asset"]["asset_id"] == "facebook_ads_creatives/creative_banner"
-        assert res["asset"]["public_url"] == fake_response["secure_url"]
-        assert res["asset"]["mime_type"] == "image/png"
+    res = upload_creative_asset(file_path=str(test_file))
+    assert res["success"] is True
+    assert res["asset"]["asset_id"] == "facebook_ads_creatives/creative_banner"
+    assert res["asset"]["public_url"] == fake_response["secure_url"]
+    assert res["asset"]["mime_type"] == "image/png"
 
 
 def test_upload_creative_asset_file_not_found(monkeypatch):
@@ -196,4 +242,3 @@ def test_upload_creative_asset_oversized_payload():
     assert res["success"] is False
     assert res["error"]["code"] == "INVALID_INPUT"
     assert "exceeds maximum 10MB limit" in res["error"]["message"]
-

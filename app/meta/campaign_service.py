@@ -12,6 +12,7 @@ from app.security.validation import (
     CTA_ALLOWED,
     OBJECTIVE_ALLOWED,
     SPECIAL_AD_CATEGORIES_ALLOWED,
+    validate_ad_account_id,
     validate_brand_name,
     validate_country_code,
 )
@@ -47,6 +48,23 @@ class CampaignService:
         subunit = round(budget_float * 100)
         return budget_float, subunit
 
+    def _resolve_ad_account_id(self, ad_account_id: str, dry_run: bool) -> str:
+        """Resolve the normalized ad_account_id, scoping live API validation to real operations.
+
+        In dry-run mode only local format validation is performed (no network call),
+        so simulations keep working for planning/preview purposes even if the Meta
+        API is unreachable or the configured token/permissions aren't set up yet --
+        matching the documented promise that dry_run "simulates ... without
+        committing changes to Meta". Live ownership validation (which does hit
+        Meta's `/me/adaccounts`) only runs when we're about to actually spend money.
+        """
+        if dry_run:
+            valid_id = validate_ad_account_id(ad_account_id)
+            return valid_id.removeprefix("act_")
+
+        account = self.account_service.validate_ad_account(ad_account_id)
+        return account.ad_account_id
+
     def create_campaign(
         self,
         ad_account_id: str,
@@ -57,7 +75,7 @@ class CampaignService:
         dry_run: bool = True,
     ) -> SafeCampaignResult:
         """Create campaign with budget validation and dry-run default."""
-        account = self.account_service.validate_ad_account(ad_account_id)
+        resolved_account_id = self._resolve_ad_account_id(ad_account_id, dry_run)
         valid_name = validate_brand_name(name)
 
         valid_obj = objective.strip().upper()
@@ -85,7 +103,7 @@ class CampaignService:
         if dry_run:
             return SafeCampaignResult(
                 id="dry_run_campaign_id_simulated",
-                ad_account_id=account.ad_account_id,
+                ad_account_id=resolved_account_id,
                 name=valid_name,
                 objective=valid_obj,
                 daily_budget_decimal=budget_decimal,
@@ -103,12 +121,12 @@ class CampaignService:
             "daily_budget": budget_subunit,
         }
 
-        res = self.client.create_campaign(account.ad_account_id, payload)
+        res = self.client.create_campaign(resolved_account_id, payload)
         campaign_id = str(res.get("id", "created_campaign"))
 
         return SafeCampaignResult(
             id=campaign_id,
-            ad_account_id=account.ad_account_id,
+            ad_account_id=resolved_account_id,
             name=valid_name,
             objective=valid_obj,
             daily_budget_decimal=budget_decimal,
@@ -132,7 +150,7 @@ class CampaignService:
         dry_run: bool = True,
     ) -> SafeAdSetResult:
         """Create ad set with server-side validated targeting and dry-run default."""
-        account = self.account_service.validate_ad_account(ad_account_id)
+        resolved_account_id = self._resolve_ad_account_id(ad_account_id, dry_run)
         valid_name = validate_brand_name(name)
 
         if not isinstance(countries, list) or not countries:
@@ -184,7 +202,7 @@ class CampaignService:
         if dry_run:
             return SafeAdSetResult(
                 id="dry_run_ad_set_id_simulated",
-                ad_account_id=account.ad_account_id,
+                ad_account_id=resolved_account_id,
                 campaign_id=campaign_id,
                 name=valid_name,
                 daily_budget_decimal=budget_decimal,
@@ -205,12 +223,12 @@ class CampaignService:
         if budget_subunit is not None:
             payload["daily_budget"] = budget_subunit
 
-        res = self.client.create_ad_set(account.ad_account_id, payload)
+        res = self.client.create_ad_set(resolved_account_id, payload)
         ad_set_id = str(res.get("id", "created_ad_set"))
 
         return SafeAdSetResult(
             id=ad_set_id,
-            ad_account_id=account.ad_account_id,
+            ad_account_id=resolved_account_id,
             campaign_id=campaign_id,
             name=valid_name,
             daily_budget_decimal=budget_decimal,
@@ -232,7 +250,7 @@ class CampaignService:
         dry_run: bool = True,
     ) -> SafeAdResult:
         """Create ad with validated copy, HTTPS link_url, CTA allowlist, and dry-run default."""
-        account = self.account_service.validate_ad_account(ad_account_id)
+        resolved_account_id = self._resolve_ad_account_id(ad_account_id, dry_run)
         valid_title = validate_brand_name(title)
 
         if not isinstance(body, str) or not body.strip() or len(body) > 2000:
@@ -254,7 +272,7 @@ class CampaignService:
         if dry_run:
             return SafeAdResult(
                 id="dry_run_ad_id_simulated",
-                ad_account_id=account.ad_account_id,
+                ad_account_id=resolved_account_id,
                 ad_set_id=ad_set_id,
                 title=valid_title,
                 body=body.strip(),
@@ -278,12 +296,12 @@ class CampaignService:
             },
         }
 
-        res = self.client.create_ad(account.ad_account_id, payload)
+        res = self.client.create_ad(resolved_account_id, payload)
         ad_id = str(res.get("id", "created_ad"))
 
         return SafeAdResult(
             id=ad_id,
-            ad_account_id=account.ad_account_id,
+            ad_account_id=resolved_account_id,
             ad_set_id=ad_set_id,
             title=valid_title,
             body=body.strip(),

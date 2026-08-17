@@ -79,12 +79,9 @@ def test_create_campaign_dry_run_and_real(monkeypatch):
 @responses.activate
 def test_create_ad_set_dry_run_and_targeting(monkeypatch):
     monkeypatch.setenv("FACEBOOK_ACCESS_TOKEN", "SAFE_TOKEN")
-    responses.add(
-        responses.GET,
-        "https://graph.facebook.com/v26.0/me/adaccounts",
-        json={"data": [{"account_id": "123456", "name": "Ad Account", "currency": "BRL"}]},
-        status=200,
-    )
+    # No `/me/adaccounts` mock: dry_run now validates the ad_account_id format
+    # locally instead of hitting the live Meta API (see campaign_service.py
+    # `_resolve_ad_account_id`), so a pure simulation call makes no HTTP request.
 
     res = create_ad_set(
         ad_account_id="123456",
@@ -107,12 +104,8 @@ def test_create_ad_set_dry_run_and_targeting(monkeypatch):
 @responses.activate
 def test_create_ad_dry_run_and_cta_validation(monkeypatch):
     monkeypatch.setenv("FACEBOOK_ACCESS_TOKEN", "SAFE_TOKEN")
-    responses.add(
-        responses.GET,
-        "https://graph.facebook.com/v26.0/me/adaccounts",
-        json={"data": [{"account_id": "123456", "name": "Ad Account", "currency": "BRL"}]},
-        status=200,
-    )
+    # No `/me/adaccounts` mock: both calls below are dry_run, which validates the
+    # ad_account_id format locally instead of hitting the live Meta API.
 
     # Valid CTA
     res = create_ad(
