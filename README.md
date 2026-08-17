@@ -1,228 +1,98 @@
-# 🔥 Facebook Ads Library MCP - Advanced Intelligence Platform
+# Facebook Ads Intelligence MCP
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![FastMCP](https://img.shields.io/badge/FastMCP-2.6+-green.svg)](https://github.com/modelcontextprotocol/python-sdk)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status: Active](https://img.shields.io/badge/Status-Active-green.svg)](https://github.com/RamsesAguirre777/facebook-ads-library-mcp)
+MCP server para inteligência de anúncios da Meta (Facebook Ads Library) com hardening de segurança, deploy via Docker/Coolify e gestão de campanhas com controle financeiro.
 
-> **The most powerful Facebook Ads Library MCP server with 15+ advanced tools for competitive intelligence, market analysis, and advertising insights. Built with FastMCP and completely FREE.**
+> **Stack:** FastMCP 3.4.7 · Python 3.12 · Crawl4AI 0.9.2 · Graph API v26.0
+> **Spec:** [docs/spec-v3.md](docs/spec-v3.md) (fonte da verdade — consolida todas as decisões de arquitetura e segurança)
 
-## 🌟 **Why This MCP?**
+## Ferramentas
 
-**Beats paid services like ScrapeCreators ($497/month) with:**
-- ✅ **15+ Advanced Tools** vs their 5-6 basic ones
-- ✅ **AI-Powered Creative Analysis** (they don't have this)
-- ✅ **ML Performance Prediction** (they don't have this)
-- ✅ **Direct API Access** (no proxy limitations)
-- ✅ **100% Free & Open Source** (vs $497/month)
-- ✅ **Complete Customization** (add your own features)
+### Leitura (Ads Library)
 
-## 🚀 **Quick Start**
+- `search_facebook_ads` — busca de anúncios por marca, país e tipo
+- `discover_competitor_brands` — descoberta de concorrentes por indústria
+- `analyze_ad_creative_elements` — análise de criativo por `ad_id` (crawl, regex-only)
+- `analyze_ad_performance_metrics` — métricas de desempenho (time_period implementado)
+- `competitive_ad_analysis` — comparação multi-marca
+- `generate_facebook_intelligence_report` — relatório executivo
+- `export_facebook_ads_data` — exportação JSON / CSV / Markdown
 
-### **1. Installation**
+### Gestão (escopo C — write-capable)
+
+- `list_ad_accounts` — contas acessíveis pelo token (read-only)
+- `upload_creative_asset` — upload de imagem base64 → Cloudinary
+- `create_campaign` — criação de campaign com teto de budget
+- `create_ad_set` — criação de ad set (targeting básico)
+- `create_ad` — criação de anúncio (CTA allowlist)
+
+Todas as tools de escrita exigem **`dry_run=True` por padrão** — produção exige `dry_run=False` explícito. Budget em moeda da conta com `MAX_CAMPAIGN_BUDGET` (default R$10,00/dia) validado antes da conversão.
+
+## Quick Start
+
+### 1. Instalação
+
 ```bash
-git clone https://github.com/RamsesAguirre777/facebook-ads-library-mcp.git
+git clone git@github.com-julio:JulioBorges/facebook-ads-library-mcp.git
 cd facebook-ads-library-mcp
-pip install -r requirements.txt
+uv sync --frozen
 ```
 
-### **2. Get Facebook Access Token**
-1. Go to [Facebook Graph API Explorer](https://developers.facebook.com/tools/explorer/)
-2. Generate access token with `ads_read` permission
-3. (Optional) [Extend token](https://developers.facebook.com/tools/debug/accesstoken/) to 60 days
+### 2. Ambiente
 
-### **3. Configure Claude Desktop**
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
-```json
-{
-  "mcpServers": {
-    "facebook_ads": {
-      "command": "python",
-      "args": [
-        "/path/to/facebook-ads-library-mcp/facebook_ads_mcp_complete.py",
-        "--facebook-token",
-        "YOUR_FACEBOOK_ACCESS_TOKEN"
-      ]
-    }
-  }
-}
-```
-
-### **4. Restart Claude Desktop**
-
-## 🛠️ **15+ Advanced Tools**
-
-### **🔍 Search & Discovery**
-- **`search_facebook_ads()`** - Advanced search with multiple filters
-- **`discover_competitor_brands()`** - Find industry competitors automatically
-- **`find_similar_advertisers()`** - Discover brands with similar strategies
-
-### **📊 Deep Analysis**
-- **`analyze_ad_creative_elements()`** - AI-powered creative analysis
-- **`analyze_ad_performance_metrics()`** - Performance insights & KPIs
-- **`analyze_ad_targeting_insights()`** - Audience targeting analysis
-
-### **🎯 Monitoring & Tracking**
-- **`monitor_brand_ad_changes()`** - Real-time campaign monitoring
-- **`track_ad_spend_estimation()`** - Budget tracking & estimation
-
-### **🏆 Competitive Intelligence**
-- **`competitive_ad_analysis()`** - Multi-brand strategy comparison
-- **`benchmark_against_industry()`** - Industry benchmarking
-- **`identify_market_opportunities()`** - Market gap analysis
-
-### **🔮 Prediction & Optimization**
-- **`predict_ad_performance()`** - ML-powered performance prediction
-- **`generate_facebook_intelligence_report()`** - Comprehensive reports
-
-### **🛠️ Utilities**
-- **`export_facebook_ads_data()`** - Export in JSON/CSV/Markdown
-
-## 💡 **Usage Examples**
-
-### **Basic Competitive Analysis**
-```python
-# In Claude Desktop
-"Analyze Nike's current Facebook advertising strategy"
-"Compare ad strategies between Tesla and BMW"
-"Generate a complete intelligence report for Airbnb"
-```
-
-### **Advanced Market Research**
-```python
-# Discover competitors
-"Find all fitness app companies advertising on Facebook"
-
-# Market opportunities
-"Identify advertising gaps in the fintech industry"
-
-# Performance prediction
-"Predict performance for this ad: 'Get fit in 30 days with our AI trainer'"
-```
-
-### **Monitoring & Alerts**
-```python
-# Track competitor changes
-"Monitor Apple for new ad campaigns and alert me if they launch 5+ new ads"
-
-# Spend tracking
-"Estimate Shopify's monthly Facebook ad spend"
-```
-
-## 🔧 **Advanced Configuration**
-
-### **Environment Variables**
 ```bash
-# Create .env file
-echo "FACEBOOK_ACCESS_TOKEN=your_token_here" > .env
+cp .env.example .env
+# FACEBOOK_ACCESS_TOKEN=<token com ads_read>
+# META_GRAPH_API_VERSION=v26.0
+# MCP_AUTH_TOKEN=<gerado com: openssl rand -hex 32>  # opcional no stdio
+# CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET  # para gestão
 ```
 
-### **Multiple Regions**
-```json
-{
-  "mcpServers": {
-    "facebook_ads_us": {
-      "command": "python",
-      "args": ["facebook_ads_mcp_complete.py", "--facebook-token", "US_TOKEN"]
-    },
-    "facebook_ads_eu": {
-      "command": "python", 
-      "args": ["facebook_ads_mcp_complete.py", "--facebook-token", "EU_TOKEN"]
-    }
-  }
-}
-```
+**Nunca** passe o token por argumento de processo (`--facebook-token` não existe mais). O token vive apenas dentro do `MetaAdsClient`.
 
-## 📈 **Performance Comparison**
+### 3. Execução
 
-| Feature | ScrapeCreators | **Our MCP** | Savings |
-|---------|----------------|-------------|---------|
-| Monthly Cost | $497 | **$0** | $497/month |
-| Facebook Tools | 5-6 basic | **15+ advanced** | 3x more |
-| Creative Analysis | ❌ | ✅ **AI-powered** | Exclusive |
-| Performance Prediction | ❌ | ✅ **ML-based** | Exclusive |
-| Rate Limits | Restricted | **Direct API** | Unlimited |
-| Customization | ❌ | ✅ **Full control** | Infinite |
-
-## 🏗️ **Architecture**
-
-```
-Facebook Ads Library MCP
-├── Core API Wrapper
-│   ├── Authentication & Rate Limiting
-│   └── Error Handling & Retry Logic
-├── Search & Discovery Engine
-│   ├── Advanced Filtering
-│   └── Competitor Discovery
-├── AI Analysis Engine
-│   ├── Creative Element Analysis
-│   └── Performance Prediction
-├── Monitoring System
-│   ├── Real-time Change Detection
-│   └── Alert System
-└── Export & Reporting
-    ├── Multiple Format Support
-    └── Executive Reports
-```
-
-## 🔒 **Security & Privacy**
-
-- **No Data Storage** - All data processed in real-time
-- **Direct API Access** - No proxy servers or data logging
-- **Open Source** - Complete transparency
-- **Local Processing** - Your data stays on your machine
-
-## 🤝 **Contributing**
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### **Development Setup**
 ```bash
-git clone https://github.com/RamsesAguirre777/facebook-ads-library-mcp.git
-cd facebook-ads-library-mcp
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements-dev.txt
+# Dev (stdio)
+MCP_TRANSPORT=stdio python -m app.server
+
+# Produção (http + ASGI)
+MCP_TRANSPORT=http uvicorn app.server:app --host 0.0.0.0 --port 8000
 ```
 
-## 📖 **Documentation**
+No modo http, o servidor exige `FACEBOOK_ACCESS_TOKEN`, `META_GRAPH_API_VERSION`, `MCP_AUTH_TOKEN` e credenciais Cloudinary no boot (fail-fast).
 
-- **[Setup Guide](docs/setup.md)** - Detailed installation instructions
-- **[API Reference](docs/api.md)** - Complete tool documentation
-- **[Examples](docs/examples.md)** - Real-world use cases
-- **[Troubleshooting](docs/troubleshooting.md)** - Common issues & solutions
+### 4. Deploy (Coolify + Docker)
 
-## 🔄 **Changelog**
+1. Adicione a aplicação no Coolify com o `docker-compose.yml` deste repo (`build.context` → clone do repo na VPS)
+2. Configure os secrets runtime-only no painel (nunca em `.env` commitado)
+3. O serviço fica atrás do Traefik com HTTPS forçado; o endpoint MCP é `/mcp` e o healthcheck `/health` é público
 
-See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
+## Segurança
 
-## 🆘 **Support**
+- **Token Meta** restrito ao `MetaAdsClient` (header Bearer, `trust_env=False`); nunca em `params`, output, logs, exceptions ou argv
+- **Redaction global** de secrets (`access_token`, Cloudinary, etc.) em respostas e logs
+- **URL policy** https-only; análise de criativos recebe **somente `ad_id`** (URL interna construída pelo servidor) — sem SSRF
+- **DTOs com allowlist**; `ad_snapshot_url` ausente por design
+- **Container hardening**: multi-stage, non-root (UID 10001), read-only rootfs, `cap_drop: ALL`, sem Docker socket, sem host mounts, sem privileged, limites de CPU/mem/PID, tmpfs + shm configurados
+- **Retry idempotente** apenas em GET; `allow_redirects=False`; timeouts obrigatórios
+- **CI** com `ruff`, `pytest`, `pip-audit`, `docker build` e **Gitleaks**
+- Resposta do MCP limitada a 1MB (política C: trunca textos; erro `RESPONSE_TOO_LARGE` se ainda estourar)
 
-- **Issues**: [GitHub Issues](https://github.com/RamsesAguirre777/facebook-ads-library-mcp/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/RamsesAguirre777/facebook-ads-library-mcp/discussions)
-- **Email**: [ramses.aguirre777@email.com](mailto:ramses.aguirre777@email.com)
+Detalhes completos, decisões numeradas (Q1–Q42) e testes em [docs/spec-v3.md](docs/spec-v3.md).
 
-## 📄 **License**
+## Desenvolvimento
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+```bash
+uv sync --frozen          # instala runtime + dev
+uv run pytest             # testes (inclui secret leak, SSRF, redaction, budget)
+uv run ruff check .       # lint
+uv run pip-audit          # auditoria de dependências
+```
 
-## 🙏 **Acknowledgments**
+### Repositório
 
-- [FastMCP](https://github.com/modelcontextprotocol/python-sdk) for the excellent MCP framework
-- [Crawl4AI](https://github.com/unclecode/crawl4ai) for AI-powered web crawling
-- [Facebook Graph API](https://developers.facebook.com/docs/graph-api) for providing access to ads data
+O arquivo original vulnerável foi movido para `legacy/` — descontinuado, mantido apenas para referência e **excluído** do build via `.dockerignore`.
 
-## ⭐ **Star History**
+## Licença
 
-[![Star History Chart](https://api.star-history.com/svg?repos=RamsesAguirre777/facebook-ads-library-mcp&type=Date)](https://star-history.com/#RamsesAguirre777/facebook-ads-library-mcp&Date)
-
----
-
-<div align="center">
-  <h3>🔥 Built with passion for the MCP community 🔥</h3>
-  <p>
-    <a href="https://twitter.com/RamsesAguirre777">Twitter</a> •
-    <a href="https://github.com/RamsesAguirre777">GitHub</a> •
-    <a href="https://linkedin.com/in/RamsesAguirre777">LinkedIn</a>
-  </p>
-</div>
+MIT — veja [LICENSE](LICENSE).
