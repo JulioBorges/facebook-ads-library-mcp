@@ -145,13 +145,8 @@ class MetaAdsClient:
     def __init__(self, access_token: str, graph_api_version: str):
         self.session = requests.Session()
         self.session.trust_env = False
-        self.session.headers.update({
-            "Authorization": f"Bearer {access_token}"
-        })
-        self.base_url = (
-            "https://graph.facebook.com/"
-            f"{graph_api_version}/ads_archive"
-        )
+        self.session.headers.update({"Authorization": f"Bearer {access_token}"})
+        self.base_url = f"https://graph.facebook.com/{graph_api_version}/ads_archive"
 ```
 
 Regras do client:
@@ -239,8 +234,7 @@ async def analyze_ad_creative_elements(
     ad_id: str,
     extract_text: bool = True,
     detect_cta: bool = True,
-) -> dict:
-    ...
+) -> dict: ...
 ```
 
 **Nenhuma Graph API neste caminho.** `ad_id` → `MetaSnapshotService` → URL interna → crawler → extração → truncamento → análise regex → DTO seguro. Falha de crawl → erro sanitizado `CREATIVE_FETCH_ERROR` + `correlation_id` (**Q6**).

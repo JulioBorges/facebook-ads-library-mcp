@@ -1,98 +1,125 @@
-# Facebook Ads Intelligence MCP
+# Facebook Ads Intelligence & Campaign Management MCP Server (v3)
 
-MCP server para inteligência de anúncios da Meta (Facebook Ads Library) com hardening de segurança, deploy via Docker/Coolify e gestão de campanhas com controle financeiro.
+Hardened, secure Model Context Protocol (MCP) server built with **FastMCP 3.4.7** and **Python 3.12** for querying the Meta Ads Library, performing competitive intelligence analysis, and managing Facebook ad campaigns with strict financial controls.
 
-> **Stack:** FastMCP 3.4.7 · Python 3.12 · Crawl4AI 0.9.2 · Graph API v26.0
-> **Spec:** [docs/spec-v3.md](docs/spec-v3.md) (fonte da verdade — consolida todas as decisões de arquitetura e segurança)
+---
 
-## Ferramentas
+## Architecture & Security Highlights
 
-### Leitura (Ads Library)
+1. **Complete Credential Isolation (SEC-001, SEC-002, Q25):**
+   - `FACEBOOK_ACCESS_TOKEN` is strictly contained within `MetaAdsClient`. It is never passed via query parameters, command-line arguments, tool return payloads, logs, or error responses.
+   - Separate `MCP_AUTH_TOKEN` protects remote HTTP calls via constant-time verification (`secrets.compare_digest`).
+   - Cloudinary credentials reside strictly within `CloudinaryClient`.
+2. **SSRF & Browser Hardening (SEC-005, SEC-006, Q6, Q8):**
+   - Creative crawling exclusively accepts validated numeric `ad_id` parameters (`^\d{1,32}$`). No arbitrary caller URLs are accepted.
+   - Crawl4AI 0.9.2 operates in isolated headless mode with concurrency limited to 1 execution (`asyncio.Semaphore(1)`) and 45s timeouts.
+3. **Financial Safeguards (Q13, Q17, Q21, Q22, Q39):**
+   - All write operations default to `dry_run=True`. Production writes require explicit `dry_run=False`.
+   - Daily budgets are capped by `MAX_CAMPAIGN_BUDGET` (default R$10.00) in the account's currency.
+   - Budgets are converted server-side into integer subunits (x100).
+   - Ad accounts are strictly validated against authorized `/me/adaccounts` (cached for 5 minutes).
+4. **Output Sanitization & Limits (SEC-003, SEC-017, Q36):**
+   - Global recursive redaction on all tool outputs, error responses, and structured logs.
+   - CSV formula injection protection escaping `=`, `+`, `-`, `@`, `\t`, `\r`.
+   - Response size ceiling of 1MB (Policy C) with automatic string truncation and `RESPONSE_TOO_LARGE` error protection.
+5. **Container Hardening (Q29, §30):**
+   - Multi-stage Dockerfile running as non-root user (`UID 10001`).
+   - Read-only root filesystem (`read_only: true`), tmpfs mounts, dropped Linux capabilities (`cap_drop: ALL`), and `no-new-privileges: true`.
 
-- `search_facebook_ads` — busca de anúncios por marca, país e tipo
-- `discover_competitor_brands` — descoberta de concorrentes por indústria
-- `analyze_ad_creative_elements` — análise de criativo por `ad_id` (crawl, regex-only)
-- `analyze_ad_performance_metrics` — métricas de desempenho (time_period implementado)
-- `competitive_ad_analysis` — comparação multi-marca
-- `generate_facebook_intelligence_report` — relatório executivo
-- `export_facebook_ads_data` — exportação JSON / CSV / Markdown
+---
 
-### Gestão (escopo C — write-capable)
+## MCP Tools Reference
 
-- `list_ad_accounts` — contas acessíveis pelo token (read-only)
-- `upload_creative_asset` — upload de imagem base64 → Cloudinary
-- `create_campaign` — criação de campaign com teto de budget
-- `create_ad_set` — criação de ad set (targeting básico)
-- `create_ad` — criação de anúncio (CTA allowlist)
+### Intelligence & Reading Tools
 
-Todas as tools de escrita exigem **`dry_run=True` por padrão** — produção exige `dry_run=False` explícito. Budget em moeda da conta com `MAX_CAMPAIGN_BUDGET` (default R$10,00/dia) validado antes da conversão.
+| Tool | Parameters | Description |
+|---|---|---|
+| `search_facebook_ads` | `brand_name`, `country="BR"`, `ad_type="ALL"`, `limit=50` | Search ads in Facebook Ads Library with allowlisted `SafeAd` schema. |
+| `discover_competitor_brands` | `industry_keywords`, `region="BR"`, `min_ads=5`, `limit=100` | Discover and rank competitor brands using cursor pagination. |
+| `analyze_ad_creative_elements` | `ad_id`, `extract_text=True`, `detect_cta=True` | Crawl and analyze ad creative copy, CTAs, and urgency triggers by ad ID. |
+| `analyze_ad_performance_metrics` | `brand_name`, `time_period=30` | Aggregate ad metrics and platform distribution filtered via `since`/`until` dates. |
+| `competitive_ad_analysis` | `brands_list` | Compare ad volume and platform presence across up to 10 brands. |
+| `generate_facebook_intelligence_report` | `brand_name`, `include_competitors=True` | Consolidated intelligence report on brand copy, headlines, and competitor landscape. |
+| `export_facebook_ads_data` | `brand_name`, `export_format="json"`, `limit=100` | Export ad records in JSON, formula-safe CSV, or Markdown format. |
 
-## Quick Start
+### Campaign Management & Asset Tools (Scope C)
 
-### 1. Instalação
+| Tool | Parameters | Description |
+|---|---|---|
+| `list_ad_accounts` | *(none)* | List authorized Meta ad accounts (read-only, cached 5 min). |
+| `upload_creative_asset` | `image_base64`, `mime_type`, `filename` | Upload image asset via Base64 to Cloudinary (max 10MB). |
+| `create_campaign` | `ad_account_id`, `name`, `objective`, `daily_budget`, `special_ad_categories=None`, `dry_run=True` | Create campaign with budget ceiling and dry-run safety default. |
+| `create_ad_set` | `ad_account_id`, `campaign_id`, `name`, `countries`, `age_min=18`, `age_max=65`, `genders=0`, `publisher_platforms=None`, `daily_budget=None`, `dry_run=True` | Create ad set with validated server-side targeting. |
+| `create_ad` | `ad_account_id`, `ad_set_id`, `image_url`, `title`, `body`, `link_url`, `call_to_action`, `dry_run=True` | Create ad with image URL, link destination, and CTA allowlist. |
 
-```bash
-git clone git@github.com-julio:JulioBorges/facebook-ads-library-mcp.git
-cd facebook-ads-library-mcp
-uv sync --frozen
-```
+---
 
-### 2. Ambiente
+## Environment Variables
 
-```bash
-cp .env.example .env
-# FACEBOOK_ACCESS_TOKEN=<token com ads_read>
-# META_GRAPH_API_VERSION=v26.0
-# MCP_AUTH_TOKEN=<gerado com: openssl rand -hex 32>  # opcional no stdio
-# CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET  # para gestão
-```
-
-**Nunca** passe o token por argumento de processo (`--facebook-token` não existe mais). O token vive apenas dentro do `MetaAdsClient`.
-
-### 3. Execução
-
-```bash
-# Dev (stdio)
-MCP_TRANSPORT=stdio python -m app.server
-
-# Produção (http + ASGI)
-MCP_TRANSPORT=http uvicorn app.server:app --host 0.0.0.0 --port 8000
-```
-
-No modo http, o servidor exige `FACEBOOK_ACCESS_TOKEN`, `META_GRAPH_API_VERSION`, `MCP_AUTH_TOKEN` e credenciais Cloudinary no boot (fail-fast).
-
-### 4. Deploy (Coolify + Docker)
-
-1. Adicione a aplicação no Coolify com o `docker-compose.yml` deste repo (`build.context` → clone do repo na VPS)
-2. Configure os secrets runtime-only no painel (nunca em `.env` commitado)
-3. O serviço fica atrás do Traefik com HTTPS forçado; o endpoint MCP é `/mcp` e o healthcheck `/health` é público
-
-## Segurança
-
-- **Token Meta** restrito ao `MetaAdsClient` (header Bearer, `trust_env=False`); nunca em `params`, output, logs, exceptions ou argv
-- **Redaction global** de secrets (`access_token`, Cloudinary, etc.) em respostas e logs
-- **URL policy** https-only; análise de criativos recebe **somente `ad_id`** (URL interna construída pelo servidor) — sem SSRF
-- **DTOs com allowlist**; `ad_snapshot_url` ausente por design
-- **Container hardening**: multi-stage, non-root (UID 10001), read-only rootfs, `cap_drop: ALL`, sem Docker socket, sem host mounts, sem privileged, limites de CPU/mem/PID, tmpfs + shm configurados
-- **Retry idempotente** apenas em GET; `allow_redirects=False`; timeouts obrigatórios
-- **CI** com `ruff`, `pytest`, `pip-audit`, `docker build` e **Gitleaks**
-- Resposta do MCP limitada a 1MB (política C: trunca textos; erro `RESPONSE_TOO_LARGE` se ainda estourar)
-
-Detalhes completos, decisões numeradas (Q1–Q42) e testes em [docs/spec-v3.md](docs/spec-v3.md).
-
-## Desenvolvimento
+Copy `.env.example` to `.env` and set your credentials:
 
 ```bash
-uv sync --frozen          # instala runtime + dev
-uv run pytest             # testes (inclui secret leak, SSRF, redaction, budget)
-uv run ruff check .       # lint
-uv run pip-audit          # auditoria de dependências
+# Meta Graph API
+FACEBOOK_ACCESS_TOKEN=EAA...
+META_GRAPH_API_VERSION=v26.0
+
+# MCP Authentication & Transport
+MCP_AUTH_TOKEN=your_secure_bearer_token_here
+MCP_TRANSPORT=stdio # Use 'http' in production
+
+# Operational Limits
+MAX_CAMPAIGN_BUDGET=10.00
+
+# Cloudinary Credentials (for asset uploads)
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
 ```
 
-### Repositório
+---
 
-O arquivo original vulnerável foi movido para `legacy/` — descontinuado, mantido apenas para referência e **excluído** do build via `.dockerignore`.
+## Local Development & Testing
 
-## Licença
+1. **Install dependencies:**
+   ```bash
+   uv sync --extra dev
+   ```
 
-MIT — veja [LICENSE](LICENSE).
+2. **Run test suite:**
+   ```bash
+   uv run pytest -v
+   ```
+
+3. **Run code linter:**
+   ```bash
+   uv run ruff check .
+   ```
+
+4. **Run acceptance test with fake token:**
+   ```bash
+   uv run python scripts/fake_token_acceptance_test.py
+   ```
+
+5. **Start server locally (stdio mode):**
+   ```bash
+   uv run python -m app.server
+   ```
+
+6. **Start server in HTTP mode (uvicorn ASGI):**
+   ```bash
+   MCP_TRANSPORT=http uv run uvicorn app.server:app --host 0.0.0.0 --port 8000
+   ```
+
+---
+
+## Production Deployment with Coolify & Traefik
+
+1. In the Coolify dashboard, create a new service with Docker Compose using the provided `docker-compose.yml`.
+2. Configure the required secrets as environment variables:
+   - `FACEBOOK_ACCESS_TOKEN`
+   - `MCP_AUTH_TOKEN`
+   - `CLOUDINARY_CLOUD_NAME`
+   - `CLOUDINARY_API_KEY`
+   - `CLOUDINARY_API_SECRET`
+   - `MAX_CAMPAIGN_BUDGET` (optional, default `10.00`)
+3. Deploy the container. The public `/health` endpoint is available for health checks.

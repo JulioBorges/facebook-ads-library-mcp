@@ -16,7 +16,7 @@ browser_config = BrowserConfig(
     browser_type="chromium",
     viewport_width=1920,
     viewport_height=1080,
-    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
 )
 
 # Configuración de crawler específica
@@ -27,7 +27,7 @@ crawler_config = CrawlerRunConfig(
     word_count_threshold=200,
     extraction_strategy=JsonCssExtractionStrategy(schema),
     markdown_generator=DefaultMarkdownGenerator(),
-    content_filter=PruningContentFilter(threshold=0.48)
+    content_filter=PruningContentFilter(threshold=0.48),
 )
 
 async with AsyncWebCrawler(config=browser_config) as crawler:
@@ -41,32 +41,17 @@ schema = {
     "name": "Facebook Ads",
     "baseSelector": "[data-testid='ad-card']",
     "fields": [
-        {
-            "name": "advertiser_name",
-            "selector": "[data-testid='advertiser-name']",
-            "type": "text"
-        },
-        {
-            "name": "ad_text",
-            "selector": "[data-testid='ad-text']",
-            "type": "text"
-        },
-        {
-            "name": "cta_button",
-            "selector": "[role='button']",
-            "type": "text"
-        }
-    ]
+        {"name": "advertiser_name", "selector": "[data-testid='advertiser-name']", "type": "text"},
+        {"name": "ad_text", "selector": "[data-testid='ad-text']", "type": "text"},
+        {"name": "cta_button", "selector": "[role='button']", "type": "text"},
+    ],
 }
 
 # LLM-based extraction (más inteligente)
 llm_strategy = LLMExtractionStrategy(
-    llm_config=LLMConfig(
-        provider="openai/gpt-4o-mini",
-        api_token=os.getenv("OPENAI_API_KEY")
-    ),
+    llm_config=LLMConfig(provider="openai/gpt-4o-mini", api_token=os.getenv("OPENAI_API_KEY")),
     schema=FacebookAdSchema.model_json_schema(),
-    instruction="Extract ad data with emotional sentiment analysis"
+    instruction="Extract ad data with emotional sentiment analysis",
 )
 ```
 
@@ -84,11 +69,7 @@ browser_config = BrowserConfig(
         "Connection": "keep-alive",
         "Upgrade-Insecure-Requests": "1",
     },
-    proxy_config=ProxyConfig(
-        server="proxy.example.com:8080",
-        username="user",
-        password="pass"
-    )
+    proxy_config=ProxyConfig(server="proxy.example.com:8080", username="user", password="pass"),
 )
 ```
 
@@ -97,9 +78,7 @@ browser_config = BrowserConfig(
 # Persistent browser profile
 user_data_dir = os.path.join(Path.home(), ".crawl4ai", "facebook_profile")
 browser_config = BrowserConfig(
-    user_data_dir=user_data_dir,
-    use_persistent_context=True,
-    session_id="facebook_ads_session"
+    user_data_dir=user_data_dir, use_persistent_context=True, session_id="facebook_ads_session"
 )
 ```
 
@@ -115,7 +94,7 @@ js_code = """
         window.scrollTo(0, document.body.scrollHeight);
         await new Promise(resolve => setTimeout(resolve, 2000));
     }
-    
+
     // Click "Load More" button if exists
     const loadMoreBtn = document.querySelector('[data-testid="load-more-button"]');
     if (loadMoreBtn) {
@@ -126,9 +105,7 @@ js_code = """
 """
 
 crawler_config = CrawlerRunConfig(
-    js_code=[js_code],
-    wait_for_selector="[data-testid='ad-card']",
-    delay_before_return_html=5.0
+    js_code=[js_code], wait_for_selector="[data-testid='ad-card']", delay_before_return_html=5.0
 )
 ```
 
@@ -162,11 +139,8 @@ async def crawl_all_pages(self, brand_name: str, max_pages: int = 10):
 ```python
 from crawl4ai.async_dispatcher import RateLimiter
 
-rate_limiter = RateLimiter(
-    base_delay=(2.0, 5.0),
-    max_delay=60.0,
-    max_retries=3
-)
+rate_limiter = RateLimiter(base_delay=(2.0, 5.0), max_delay=60.0, max_retries=3)
+
 
 async def robust_crawl(self, url: str, retries: int = 3):
     """Robust crawling with exponential backoff"""
@@ -178,8 +152,8 @@ async def robust_crawl(self, url: str, retries: int = 3):
         except Exception as e:
             if attempt == retries - 1:
                 raise e
-            await asyncio.sleep(2 ** attempt)
-    
+            await asyncio.sleep(2**attempt)
+
     return None
 ```
 
@@ -190,8 +164,7 @@ async def robust_crawl(self, url: str, retries: int = 3):
 # Optimized markdown for LLM processing
 markdown_generator = DefaultMarkdownGenerator(
     content_filter=BM25ContentFilter(
-        user_query="Facebook advertising campaigns and brand strategies",
-        bm25_threshold=1.2
+        user_query="Facebook advertising campaigns and brand strategies", bm25_threshold=1.2
     )
 )
 ```
@@ -203,7 +176,7 @@ crawler_config = CrawlerRunConfig(
     screenshot=True,
     extract_media=True,
     lazy_load_images=True,
-    capture_network=True  # For tracking resources
+    capture_network=True,  # For tracking resources
 )
 ```
 
@@ -213,7 +186,7 @@ crawler_config = CrawlerRunConfig(
 def process_ad_data(self, raw_data):
     """Process and enrich ad data"""
     processed_ads = []
-    
+
     for ad in raw_data:
         processed_ad = {
             "id": ad.get("id"),
@@ -225,10 +198,10 @@ def process_ad_data(self, raw_data):
             "metrics": self.estimate_performance(ad),
             "sentiment": self.analyze_sentiment(ad.get("ad_text", "")),
             "themes": self.extract_themes(ad.get("ad_text", "")),
-            "scraped_at": datetime.now().isoformat()
+            "scraped_at": datetime.now().isoformat(),
         }
         processed_ads.append(processed_ad)
-    
+
     return processed_ads
 ```
 
@@ -255,7 +228,7 @@ from crawl4ai.async_dispatcher import MemoryAdaptiveDispatcher
 
 dispatcher = MemoryAdaptiveDispatcher(
     rate_limiter=RateLimiter(base_delay=(1.0, 3.0)),
-    max_memory_usage=0.8  # Use max 80% of available memory
+    max_memory_usage=0.8,  # Use max 80% of available memory
 )
 ```
 
@@ -265,7 +238,7 @@ dispatcher = MemoryAdaptiveDispatcher(
 crawler_config = CrawlerRunConfig(
     cache_mode=CacheMode.ENABLED,
     cache_ttl=3600,  # 1 hour cache
-    bypass_cache=False
+    bypass_cache=False,
 )
 ```
 
@@ -277,11 +250,7 @@ crawler_config = CrawlerRunConfig(
 crawler_config = CrawlerRunConfig(
     locale="en-US",
     timezone_id="America/New_York",
-    geolocation=GeolocationConfig(
-        latitude=40.7128,
-        longitude=-74.0060,
-        accuracy=100.0
-    )
+    geolocation=GeolocationConfig(latitude=40.7128, longitude=-74.0060, accuracy=100.0),
 )
 ```
 
@@ -291,18 +260,14 @@ crawler_config = CrawlerRunConfig(
 crawler_config = CrawlerRunConfig(
     capture_network=True,
     capture_console=True,
-    mhtml=True  # Save complete page state
+    mhtml=True,  # Save complete page state
 )
 ```
 
 ### 3. Browser Pooling
 ```python
 # Pre-warmed browser instances
-browser_config = BrowserConfig(
-    pool_size=5,
-    pre_warm_pages=True,
-    max_concurrent_pages=3
-)
+browser_config = BrowserConfig(pool_size=5, pre_warm_pages=True, max_concurrent_pages=3)
 ```
 
 ## 🛡️ Security & Anti-Detection
@@ -310,15 +275,15 @@ browser_config = BrowserConfig(
 ### 1. Proxy Rotation
 ```python
 # Dynamic proxy switching
-proxy_rotation = ProxyRotationStrategy([
-    ProxyConfig(server="proxy1.example.com:8080"),
-    ProxyConfig(server="proxy2.example.com:8080"),
-    ProxyConfig(server="proxy3.example.com:8080")
-])
-
-crawler_config = CrawlerRunConfig(
-    proxy_rotation_strategy=proxy_rotation
+proxy_rotation = ProxyRotationStrategy(
+    [
+        ProxyConfig(server="proxy1.example.com:8080"),
+        ProxyConfig(server="proxy2.example.com:8080"),
+        ProxyConfig(server="proxy3.example.com:8080"),
+    ]
 )
+
+crawler_config = CrawlerRunConfig(proxy_rotation_strategy=proxy_rotation)
 ```
 
 ### 2. User Agent Rotation
@@ -327,21 +292,16 @@ crawler_config = CrawlerRunConfig(
 user_agents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
 ]
 
-crawler_config = CrawlerRunConfig(
-    user_agent=random.choice(user_agents)
-)
+crawler_config = CrawlerRunConfig(user_agent=random.choice(user_agents))
 ```
 
 ### 3. Robots.txt Compliance
 ```python
 # Respect robots.txt
-crawler_config = CrawlerRunConfig(
-    check_robots_txt=True,
-    respect_robots_txt=True
-)
+crawler_config = CrawlerRunConfig(check_robots_txt=True, respect_robots_txt=True)
 ```
 
 ## 📊 Monitoring & Analytics
@@ -357,7 +317,7 @@ metrics = {
     "peak_memory": result.dispatch_result.peak_memory,
     "success_rate": result.success,
     "content_size": len(result.html),
-    "extracted_items": len(json.loads(result.extracted_content or "[]"))
+    "extracted_items": len(json.loads(result.extracted_content or "[]")),
 }
 ```
 
@@ -372,7 +332,7 @@ except Exception as e:
         "error_message": str(e),
         "url": url,
         "timestamp": datetime.now().isoformat(),
-        "stack_trace": traceback.format_exc()
+        "stack_trace": traceback.format_exc(),
     }
     await self.log_error(error_context)
 ```

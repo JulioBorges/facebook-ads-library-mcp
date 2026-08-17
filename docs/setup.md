@@ -250,6 +250,7 @@ source venv/bin/activate
 Add debug logging to troubleshoot:
 ```python
 import logging
+
 logging.basicConfig(level=logging.DEBUG)
 ```
 
@@ -288,6 +289,7 @@ echo '{"jsonrpc": "2.0", "method": "initialize", "params": {}, "id": 1}' | pytho
 import functools
 import time
 
+
 @functools.lru_cache(maxsize=100)
 def cached_request(url, params_str):
     # Implementation
@@ -298,6 +300,7 @@ def cached_request(url, params_str):
 ```python
 import asyncio
 import aiohttp
+
 
 # For handling multiple concurrent requests
 async def fetch_multiple_brands(brands):

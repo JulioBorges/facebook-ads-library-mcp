@@ -1,0 +1,36 @@
+services:
+  facebook-ads-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: facebook-ads-mcp
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=512M
+      - /home/appuser/.crawl4ai:size=128M
+    shm_size: 1gb
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2g
+    cpus: 2.0
+    pids_limit: 256
+    expose:
+      - "8000"
+    environment:
+      MCP_TRANSPORT: http
+      META_GRAPH_API_VERSION: ${META_GRAPH_API_VERSION:-v26.0}
+      MAX_CAMPAIGN_BUDGET: ${MAX_CAMPAIGN_BUDGET:-10.00}
+      FACEBOOK_ACCESS_TOKEN: ${FACEBOOK_ACCESS_TOKEN:?}
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:?}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:?}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:?}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:?}
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\" || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
